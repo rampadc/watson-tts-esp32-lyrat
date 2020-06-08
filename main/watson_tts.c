@@ -16,14 +16,11 @@ typedef struct watson_tts {
   audio_element_handle_t  i2s_stream_writer;
   audio_element_handle_t  mp3_decoder;
   char                    *url_buffer;
-
-  char                    *endpoint_url;
-  char                    *voice;
 } watson_tts_t;
 
 static const char *TAG = "WATSON_TTS";
 
-#define WATSON_TTS_TEMPLATE "%s/v1/synthesize?text=%s&accept=audio/mp3&voice=%s"
+#define WATSON_TTS_TEMPLATE CONFIG_TTS_SERVICE_ENDPOINT"/v1/synthesize?voice="CONFIG_TTS_VOICE"&accept=audio/mp3&text=%s"
 
 watson_tts_handle_t watson_tts_init() {
   watson_tts_t *tts = calloc(1, sizeof(watson_tts_t));
@@ -32,14 +29,6 @@ watson_tts_handle_t watson_tts_init() {
   ESP_LOGI(TAG, "[TTS.0] Filling in config for Watson TTS");
   tts->url_buffer = malloc(DEFAULT_TTS_BUFFER_SIZE);
   AUDIO_MEM_CHECK(TAG, tts->url_buffer, goto exit_tts_init);
-  // tts->api_key = CONFIG_TTS_APIKEY;
-  // AUDIO_MEM_CHECK(TAG, tts->api_key, goto exit_tts_init);
-  tts->endpoint_url = CONFIG_TTS_URL_WITH_APIKEY;
-  AUDIO_MEM_CHECK(TAG, tts->endpoint_url, goto exit_tts_init);
-  tts->voice = CONFIG_TTS_VOICE;
-  AUDIO_MEM_CHECK(TAG, tts->voice, goto exit_tts_init);
-  ESP_LOGI(TAG, "[TTS.0] Endpoint URL: %s", tts->endpoint_url);
-  ESP_LOGI(TAG, "[TTS.0] Voice: %s", tts->voice);
   
   ESP_LOGI(TAG, "[TTS.0] Creating an audio pipeline for Watson TTS");
   audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
@@ -49,6 +38,7 @@ watson_tts_handle_t watson_tts_init() {
 
   ESP_LOGI(TAG, "[TTS.1] Create HTTP stream to read data");
   http_stream_cfg_t http_cfg = HTTP_STREAM_CFG_DEFAULT();
+  
   tts->http_stream_reader = http_stream_init(&http_cfg);
 
   ESP_LOGI(TAG, "[TTS.2] Create I2S stream to write data to codec chip");
@@ -84,8 +74,7 @@ esp_err_t watson_tts_synthesize(watson_tts_handle_t tts, const char *text) {
     ESP_LOGE(TAG, "ERROR: No memory available");
     return ESP_ERR_NO_MEM;
   }
-  snprintf(tts->url_buffer, DEFAULT_TTS_BUFFER_SIZE, 
-    WATSON_TTS_TEMPLATE, tts->endpoint_url, dupText, tts->voice);
+  snprintf(tts->url_buffer, DEFAULT_TTS_BUFFER_SIZE, WATSON_TTS_TEMPLATE, dupText);
   ESP_LOGI(TAG, "[TTS.S] GET %s", tts->url_buffer);
   ESP_LOGI(TAG, "%s", tts->url_buffer);
 
