@@ -40,7 +40,7 @@ int _http_stream_event_handle(http_stream_event_msg_t *msg) {
     esp_http_client_set_method(http_client, HTTP_METHOD_POST);
     esp_http_client_set_header(http_client, "Content-Type", "application/json");
     esp_http_client_set_header(http_client, "Accept", "audio/mp3");
-    esp_http_client_set_header(http_client, "Authorization", "Basic YXBpa2V5OnJSd1RveVdoQVBKZTZndExJTFg3TWZ3eDZpNHh5N2kyQThmNFl4QjhtcTct");
+    esp_http_client_set_header(http_client, "Authorization", CONFIG_TTS_AUTHORIZATION_BASE64);
     return ESP_OK;
   }
 
@@ -94,8 +94,6 @@ exit_tts_init:
 }
 
 esp_err_t watson_tts_synthesize(watson_tts_handle_t tts, const char *text) {
-  // Create URL from strings
-  // WATSON_TTS_TEMPLATE "%s/v1/synthesize?text=%s&accept=audio/mp3&voice=%s"
   char *dupText = strdup(text);
   if (dupText == NULL) {
     ESP_LOGE(TAG, "ERROR: No memory available");

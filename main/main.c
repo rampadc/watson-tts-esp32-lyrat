@@ -74,6 +74,7 @@ void app_main(void)
     ESP_LOGI(TAG, "[4.1] Listening event from the pipeline");
     watson_tts_set_listener(tts, evt);
 
+    ESP_LOGI(TAG, "[ 5 ] Reading out 'All dogs go to heaven.'");
     watson_tts_synthesize(tts, 
         "All dogs go to heaven.");
 

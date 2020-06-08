@@ -25,6 +25,17 @@ menu "IBM Watson Configuration"
 			Service endpoint for Watson Text-to-Speech
 			https://cloud.ibm.com/apidocs/text-to-speech#service-endpoint
 	
+	config TTS_AUTHORIZATION_BASE64
+		string "Watson Text-to-Speech authorization encoded in base64 prepended with 'Basic '"
+		default "Basic XYZ"
+		help
+			Encode base64 of "apikey:{actual api key}". Put encoded version after 'Basic '.
+
+			For example, if the APIKey provided is "rockon". Then the combined username and 
+			apikey for basic auth is "apikey:rockon". Encoding this in base64 gives "YXBpa2V5OnJvY2tvbg==".
+
+			Fill this field with "Basic YXBpa2V5OnJvY2tvbg=="
+
 	config TTS_VOICE
 		string "Watson Text-to-Speech Voice"
 		default "en-GB_KateV3Voice"
