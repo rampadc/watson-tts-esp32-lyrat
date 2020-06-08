@@ -15,3 +15,20 @@ config WIFI_PASSWORD
 		Can be left blank if the network has no security set.
 
 endmenu
+
+menu "IBM Watson Configuration"
+
+	config TTS_URL_WITH_APIKEY
+		string "Watson Text-to-Speech service endpoint with APIKEY"
+		default "https://apikey:{api_key}@api.text-to-speech.watson.cloud.ibm.com"
+		help
+			Service endpoint for Watson Text-to-Speech
+			https://cloud.ibm.com/apidocs/text-to-speech#service-endpoint
+	
+	config TTS_VOICE
+		string "Watson Text-to-Speech Voice"
+		default "en-GB_KateV3Voice"
+		help
+			Voice ID for Watson Text-to-Speech
+			https://cloud.ibm.com/apidocs/text-to-speech#list-voices
+endmenu
