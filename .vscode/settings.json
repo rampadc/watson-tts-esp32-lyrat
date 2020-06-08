@@ -7,5 +7,12 @@
   "[c]": {
     "editor.quickSuggestions": true
   },
-  "C_Cpp.intelliSenseEngineFallback": "Enabled"
+  "C_Cpp.intelliSenseEngineFallback": "Enabled",
+  "files.associations": {
+    "opensipsctlrc": "properties",
+    "*.ipp": "c",
+    "bitset": "c",
+    "set": "c",
+    "*.inc": "c"
+  }
 }

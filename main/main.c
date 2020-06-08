@@ -13,28 +13,40 @@
 #include "esp_spi_flash.h"
 
 #include "esp_log.h"
+#include "esp_wifi.h"
+#include "nvs_flash.h"
+
+#include "esp_peripherals.h"
+#include "periph_wifi.h"
 
 static const char *TAG = "WATSON_STT_TTS";
 
 void app_main(void)
 {
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES) {
+        // NVS partition was truncated and needs to be erased
+        // Retry nvs_flash_init
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    tcpip_adapter_init();
+
     esp_log_level_set("*", ESP_LOG_WARN);
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
-    ESP_LOGI(TAG, "[ 1 ] Hello World");
-    printf("Hello world!\n");
+    ESP_LOGI(TAG, "[ 1 ] Start and wait for Wi-Fi");
+    esp_periph_config_t periph_cfg = DEFAULT_ESP_PERIPH_SET_CONFIG();
+    esp_periph_set_handle_t set = esp_periph_set_init(&periph_cfg);
+    periph_wifi_cfg_t wifi_cfg = {
+        .ssid = CONFIG_WIFI_SSID,
+        .password = CONFIG_WIFI_PASSWORD,
+    };
+    esp_periph_handle_t wifi_handle = periph_wifi_init(&wifi_cfg);
+    esp_periph_start(set, wifi_handle);
+    err = periph_wifi_wait_for_connected(wifi_handle, portMAX_DELAY);
+    ESP_LOGI(TAG, "[1.1] Wi-Fi connected: %d", err == ESP_OK);
 
-    /* Print chip information */
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    ESP_LOGI(TAG, "[ 2 ] This is ESP32 chip with %d CPU cores, WiFi%s%s, ",
-            chip_info.cores,
-            (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
-            (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "");
-
-    ESP_LOGI(TAG, "[2.1] silicon revision %d, ", chip_info.revision);
-    ESP_LOGI(TAG, "[2.2] %dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
-            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
     for (int i = 10; i >= 0; i--) {
         ESP_LOGI(TAG, "[ 3 ] Restarting in %d seconds...\n", i);
