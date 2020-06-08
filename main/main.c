@@ -74,7 +74,8 @@ void app_main(void)
     ESP_LOGI(TAG, "[4.1] Listening event from the pipeline");
     watson_tts_set_listener(tts, evt);
 
-    watson_tts_synthesize(tts, "The%20Pomchi%20is%20a%20mixed-breed%20dog%E2%80%93a%20cross%20between%20the%20Pomeranian%20and%20the%20Chihuahua%20dog%20breeds.%20Playful,%20devoted,%20and%20energetic,%20these%20small%20pups%20inherited%20some%20of%20the%20best%20qualities%20from%20both%20of%20their%20parents");
+    watson_tts_synthesize(tts, 
+        "All dogs go to heaven.");
 
     while(1) {
         audio_event_iface_msg_t msg;
@@ -87,9 +88,17 @@ void app_main(void)
         ESP_LOGI(TAG, "[ * ] Event received: src_type:%d, source:%p cmd:%d, data:%p, data_len:%d",
             msg.source_type, msg.source, msg.cmd, msg.data, msg.data_len);
 
-        ESP_LOGI(TAG, "[ * ] Received event");
-        ESP_LOGI(TAG, "[ * ] Source type: %d", msg.source_type);
-
+        
         watson_handle_msg(tts, msg);
     }
+
+    ESP_LOGI(TAG, "[ 6 ] Stop audio_pipeline");
+    watson_tts_destroy(tts);
+    /* Stop all periph before removing the listener */
+    esp_periph_set_stop_all(set);
+    audio_event_iface_remove_listener(esp_periph_set_get_event_iface(set), evt);
+
+    /* Make sure audio_pipeline_remove_listener & audio_event_iface_remove_listener are called before destroying event_iface */
+    audio_event_iface_destroy(evt);
+    esp_periph_set_destroy(set);
 }

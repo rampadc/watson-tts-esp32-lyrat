@@ -10,25 +10,50 @@
 
 #include <string.h>
 
+#include "esp_http_client.h"
+
 typedef struct watson_tts {
   audio_pipeline_handle_t pipeline;
   audio_element_handle_t  http_stream_reader;
   audio_element_handle_t  i2s_stream_writer;
   audio_element_handle_t  mp3_decoder;
-  char                    *url_buffer;
+  char                    *payload_buffer;
+  char                    *text;
+  int                     payload_len;
 } watson_tts_t;
 
 static const char *TAG = "WATSON_TTS";
 
-#define WATSON_TTS_TEMPLATE CONFIG_TTS_SERVICE_ENDPOINT"/v1/synthesize?voice="CONFIG_TTS_VOICE"&accept=audio/mp3&text=%s"
+#define WATSON_TTS_TEMPLATE CONFIG_TTS_SERVICE_ENDPOINT"/v1/synthesize?voice="CONFIG_TTS_VOICE
+#define WATSON_TTS_PAYLOAD "{\"text\": \"%s\"}"
+
+static watson_tts_t *tts;
+
+int _http_stream_event_handle(http_stream_event_msg_t *msg) {
+  esp_http_client_handle_t http_client = (esp_http_client_handle_t)msg->http_client;
+
+  if (msg->event_id == HTTP_STREAM_PRE_REQUEST) {
+    // ESP_LOGI(TAG, "TTS _HTTP");
+    // ESP_LOGI(TAG, "%s", tts->payload_buffer);
+    // ESP_LOGI(TAG, "%d", tts->payload_len);
+    esp_http_client_set_post_field(http_client, tts->payload_buffer, tts->payload_len);
+    esp_http_client_set_method(http_client, HTTP_METHOD_POST);
+    esp_http_client_set_header(http_client, "Content-Type", "application/json");
+    esp_http_client_set_header(http_client, "Accept", "audio/mp3");
+    esp_http_client_set_header(http_client, "Authorization", "Basic YXBpa2V5OnJSd1RveVdoQVBKZTZndExJTFg3TWZ3eDZpNHh5N2kyQThmNFl4QjhtcTct");
+    return ESP_OK;
+  }
+
+  return ESP_OK;
+}
 
 watson_tts_handle_t watson_tts_init() {
-  watson_tts_t *tts = calloc(1, sizeof(watson_tts_t));
+  tts = calloc(1, sizeof(watson_tts_t));
   AUDIO_MEM_CHECK(TAG, tts, return NULL);
 
   ESP_LOGI(TAG, "[TTS.0] Filling in config for Watson TTS");
-  tts->url_buffer = malloc(DEFAULT_TTS_BUFFER_SIZE);
-  AUDIO_MEM_CHECK(TAG, tts->url_buffer, goto exit_tts_init);
+  tts->payload_buffer = malloc(DEFAULT_TTS_BUFFER_SIZE);
+  AUDIO_MEM_CHECK(TAG, tts->payload_buffer, goto exit_tts_init);
   
   ESP_LOGI(TAG, "[TTS.0] Creating an audio pipeline for Watson TTS");
   audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
@@ -38,13 +63,14 @@ watson_tts_handle_t watson_tts_init() {
 
   ESP_LOGI(TAG, "[TTS.1] Create HTTP stream to read data");
   http_stream_cfg_t http_cfg = HTTP_STREAM_CFG_DEFAULT();
-  
+  http_cfg.event_handle = _http_stream_event_handle;
   tts->http_stream_reader = http_stream_init(&http_cfg);
 
   ESP_LOGI(TAG, "[TTS.2] Create I2S stream to write data to codec chip");
   i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
   i2s_cfg.type = AUDIO_STREAM_WRITER;
   tts->i2s_stream_writer = i2s_stream_init(&i2s_cfg);
+  // i2s_stream_set_clk(tts->i2s_stream_writer, 22050, 16, 2);
 
   ESP_LOGI(TAG, "[TTS.3] Create MP3 decoder to decode mp3 file");
   mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
@@ -54,6 +80,8 @@ watson_tts_handle_t watson_tts_init() {
   audio_pipeline_register(tts->pipeline, tts->http_stream_reader, "tts_http");
   audio_pipeline_register(tts->pipeline, tts->mp3_decoder, "tts_mp3");
   audio_pipeline_register(tts->pipeline, tts->i2s_stream_writer, "tts_i2s");
+
+  audio_element_set_uri(tts->http_stream_reader, WATSON_TTS_TEMPLATE);
 
   ESP_LOGI(TAG, "[TTS.5] Link elements: http_stream->mp3_decoder->i2s_stream->codec");
   audio_pipeline_link(tts->pipeline, (const char *[]) {"tts_http", "tts_mp3", "tts_i2s"}, 3);
@@ -68,19 +96,18 @@ exit_tts_init:
 esp_err_t watson_tts_synthesize(watson_tts_handle_t tts, const char *text) {
   // Create URL from strings
   // WATSON_TTS_TEMPLATE "%s/v1/synthesize?text=%s&accept=audio/mp3&voice=%s"
-
   char *dupText = strdup(text);
   if (dupText == NULL) {
     ESP_LOGE(TAG, "ERROR: No memory available");
     return ESP_ERR_NO_MEM;
   }
-  snprintf(tts->url_buffer, DEFAULT_TTS_BUFFER_SIZE, WATSON_TTS_TEMPLATE, dupText);
-  ESP_LOGI(TAG, "[TTS.S] GET %s", tts->url_buffer);
-  ESP_LOGI(TAG, "%s", tts->url_buffer);
 
+  tts->payload_len = snprintf(tts->payload_buffer, DEFAULT_TTS_BUFFER_SIZE, WATSON_TTS_PAYLOAD, dupText);
+  // ESP_LOGI(TAG, "TTS_SYN");
+  // ESP_LOGI(TAG, "%s", tts->payload_buffer);
+  // ESP_LOGI(TAG, "%d", tts->payload_len);
   audio_pipeline_reset_items_state(tts->pipeline);
   audio_pipeline_reset_ringbuffer(tts->pipeline);
-  audio_element_set_uri(tts->http_stream_reader, tts->url_buffer);
   audio_pipeline_run(tts->pipeline);
   return ESP_OK;
 }
@@ -96,7 +123,7 @@ esp_err_t watson_tts_destroy(watson_tts_handle_t tts) {
   audio_element_deinit(tts->i2s_stream_writer);
   audio_element_deinit(tts->mp3_decoder);
   audio_element_deinit(tts->http_stream_reader);
-  free(tts->url_buffer);
+  free(tts->payload_buffer);
   free(tts);
   return ESP_OK;
 }
