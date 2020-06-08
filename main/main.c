@@ -11,13 +11,21 @@
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "esp_spi_flash.h"
-
+// [1.1]
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
-
 #include "esp_peripherals.h"
 #include "periph_wifi.h"
+// [2.0]-[2.1]
+#include "audio_pipeline.h"
+#include "board.h"
+// [2.2]
+#include "http_stream.h"
+// [2.3]
+#include "i2s_stream.h"
+// [2.4]
+#include "mp3_decoder.h"
 
 static const char *TAG = "WATSON_STT_TTS";
 
@@ -47,12 +55,90 @@ void app_main(void)
     err = periph_wifi_wait_for_connected(wifi_handle, portMAX_DELAY);
     ESP_LOGI(TAG, "[1.1] Wi-Fi connected: %d", err == ESP_OK);
 
+    ESP_LOGI(TAG, "[2.0] Create an audio pipeline for playback");
+    ESP_LOGI(TAG, "[2.0] - HTTP Stream reader");
+    ESP_LOGI(TAG, "[2.0] - I2S Stream writer");
+    ESP_LOGI(TAG, "[2.0] - MP3 Decoder");
+    audio_pipeline_handle_t pipeline;
+    audio_element_handle_t http_stream_reader, i2s_stream_writer, mp3_decoder;
+    audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
+    pipeline = audio_pipeline_init(&pipeline_cfg);
+    mem_assert(pipeline);
 
-    for (int i = 10; i >= 0; i--) {
-        ESP_LOGI(TAG, "[ 3 ] Restarting in %d seconds...\n", i);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    ESP_LOGI(TAG, "[2.1] Start audio codec chip");
+    audio_board_handle_t board_handle = audio_board_init();
+    audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_DECODE, AUDIO_HAL_CTRL_START);
+
+    ESP_LOGI(TAG, "[2.2] Create HTTP stream to read data");
+    http_stream_cfg_t http_cfg = HTTP_STREAM_CFG_DEFAULT();
+    http_stream_reader = http_stream_init(&http_cfg);
+
+    ESP_LOGI(TAG, "[2.3] Create I2S stream to write data to codec chip");
+    i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
+    i2s_cfg.type = AUDIO_STREAM_WRITER;
+    i2s_stream_writer = i2s_stream_init(&i2s_cfg);
+
+    ESP_LOGI(TAG, "[2.4] Create MP3 decoder to decode mp3 file");
+    mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
+    mp3_decoder = mp3_decoder_init(&mp3_cfg);
+
+    ESP_LOGI(TAG, "[2.5] Register all elements to the audio pipeline");
+    audio_pipeline_register(pipeline, http_stream_reader, "http");
+    audio_pipeline_register(pipeline, mp3_decoder, "mp3_decoder");
+    audio_pipeline_register(pipeline, i2s_stream_writer, "i2s_writer");
+
+    ESP_LOGI(TAG, "[2.6] Link elements: http_stream-->mp3_decoder-->i2s_stream-->[codec_chip]");
+    audio_pipeline_link(pipeline, (const char *[]) {"http", "mp3_decoder", "i2s_writer"}, 3);
+
+    ESP_LOGI(TAG, "[2.7] Set URL for HTTP stream (MP3)");
+    audio_element_set_uri(http_stream_reader, "https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.mp3");
+
+    ESP_LOGI(TAG, "[ 3 ] Set up event listeners");
+    audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
+    audio_event_iface_handle_t evt = audio_event_iface_init(&evt_cfg);
+
+    ESP_LOGI(TAG, "[3.1] Listening on all events from pipeline");
+    audio_pipeline_set_listener(pipeline, evt);
+
+    ESP_LOGI(TAG, "[3.2] Listening on all events from peripherals");
+    audio_event_iface_set_listener(esp_periph_set_get_event_iface(set), evt);
+
+    ESP_LOGI(TAG, "[ 4 ] Start audio pipeline");
+    audio_pipeline_run(pipeline);
+
+    while(1) {
+        audio_event_iface_msg_t msg;
+        esp_err_t ret = audio_event_iface_listen(evt, &msg, portMAX_DELAY);
+
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "[ * ] Event interface error: %d", ret);
+            continue;
+        }
+
+        ESP_LOGI(TAG, "[ * ] Received event");
+        ESP_LOGI(TAG, "[ * ] Source type: %d", msg.source_type);
+
+        // Sort events
+        if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT
+            && msg.source == (void *) mp3_decoder
+            && msg.cmd == AEL_MSG_CMD_REPORT_MUSIC_INFO) {
+            audio_element_info_t music_info = {0};
+            audio_element_getinfo(mp3_decoder, &music_info);
+
+            ESP_LOGI(TAG, "[ * ] Receive music info from mp3 decoder, sample_rates=%d, bits=%d, ch=%d",
+                     music_info.sample_rates, music_info.bits, music_info.channels);
+
+            audio_element_setinfo(i2s_stream_writer, &music_info);
+            i2s_stream_set_clk(i2s_stream_writer, music_info.sample_rates, music_info.bits, music_info.channels);
+            continue;
+        }
+
+        if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT && msg.source == (void *) i2s_stream_writer
+            && msg.cmd == AEL_MSG_CMD_REPORT_STATUS
+            && (((int)msg.data == AEL_STATUS_STATE_STOPPED) || ((int)msg.data == AEL_STATUS_STATE_FINISHED))) {
+            ESP_LOGW(TAG, "[ * ] Stop event received");
+            continue;
+            // break;
+        }
     }
-    ESP_LOGI(TAG, "[ 4 ] Restarting now");
-    fflush(stdout);
-    esp_restart();
 }
