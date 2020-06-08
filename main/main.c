@@ -25,7 +25,7 @@
 
 #include "watson_tts.h"
 
-static const char *TAG = "WATSON_STT_TTS";
+static const char *TAG = "WATSON_TTS";
 
 void app_main(void)
 {
