@@ -11,11 +11,17 @@ Install [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/ge
 ## Running it
 
 1. Run `idf.py menuconfig` to configure IBM Watson Text-to-Speech by filling out the endpoint, basic auth string (containing the APIKey) and voice selection.
+
+![](docs/kconfig1.png)
+![](docs/kconfig2.png)
+
 2. Run `idf.py build` to build.
 3. Run `idf.py flash -p [PORT]` to flash to your device. Hold Boot, and press Reset once to instantiate flashing if something resembles `Connecting ....._____...` is shown.
-4. RUn `idf.py monitor -p [PORT]` to watch debug logs.
+4. Run `idf.py monitor -p [PORT]` to watch debug logs.
 
-This repo was built using ESP32-LyraT board.
+![](docs/debug.png)
+
+This repo was built using [ESP32-LyraT](https://www.espressif.com/en/products/devkits/esp32-lyrat) board.
 
 ## Improving it
 
